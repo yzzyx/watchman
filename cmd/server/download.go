@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -263,13 +264,19 @@ func (s *searcher) refreshData(initialDir string) (*DownloadStats, error) {
 
 	lastDataRefreshFailure.WithLabelValues("SDNs").Set(float64(time.Now().Unix()))
 
-	results, err := ofacRecords(s.logger, initialDir)
-	if err != nil {
-		lastDataRefreshFailure.WithLabelValues("SDNs").Set(float64(time.Now().Unix()))
-		stats.Errors = append(stats.Errors, fmt.Errorf("OFAC: %v", err))
-	}
-	if results == nil {
-		results = &ofac.Results{}
+	var err error
+
+	skipOFAC, _ := strconv.ParseBool(os.Getenv("SKIP_OFAC"))
+	results := &ofac.Results{}
+	if !skipOFAC {
+		results, err = ofacRecords(s.logger, initialDir)
+		if err != nil {
+			lastDataRefreshFailure.WithLabelValues("SDNs").Set(float64(time.Now().Unix()))
+			stats.Errors = append(stats.Errors, fmt.Errorf("OFAC: %v", err))
+		}
+		if results == nil {
+			results = &ofac.Results{}
+		}
 	}
 
 	sdns := precomputeSDNs(results.SDNs, results.Addresses, s.pipe)
@@ -277,25 +284,37 @@ func (s *searcher) refreshData(initialDir string) (*DownloadStats, error) {
 	alts := precomputeAlts(results.AlternateIdentities, s.pipe)
 	sdnComments := results.SDNComments
 
-	deniedPersons, err := dplRecords(s.logger, initialDir)
-	if err != nil {
-		lastDataRefreshFailure.WithLabelValues("DPs").Set(float64(time.Now().Unix()))
-		stats.Errors = append(stats.Errors, fmt.Errorf("DPL: %v", err))
+	deniedPersons := []*dpl.DPL{}
+	skipDPL, _ := strconv.ParseBool(os.Getenv("SKIP_DPL"))
+	if !skipDPL {
+		deniedPersons, err = dplRecords(s.logger, initialDir)
+		if err != nil {
+			lastDataRefreshFailure.WithLabelValues("DPs").Set(float64(time.Now().Unix()))
+			stats.Errors = append(stats.Errors, fmt.Errorf("DPL: %v", err))
+		}
 	}
 	dps := precomputeDPs(deniedPersons, s.pipe)
 
-	euConsolidatedList, err := euCSLRecords(s.logger, initialDir)
-	if err != nil {
-		lastDataRefreshFailure.WithLabelValues("EUCSL").Set(float64(time.Now().Unix()))
-		stats.Errors = append(stats.Errors, fmt.Errorf("EUCSL: %v", err))
+	euConsolidatedList := []*csl.EUCSLRecord{}
+	skipEUCSL, _ := strconv.ParseBool(os.Getenv("SKIP_EU_CSL"))
+	if !skipEUCSL {
+		euConsolidatedList, err = euCSLRecords(s.logger, initialDir)
+		if err != nil {
+			lastDataRefreshFailure.WithLabelValues("EUCSL").Set(float64(time.Now().Unix()))
+			stats.Errors = append(stats.Errors, fmt.Errorf("EUCSL: %v", err))
+		}
 	}
 
 	euCSLs := precomputeCSLEntities[csl.EUCSLRecord](euConsolidatedList, s.pipe)
 
-	ukConsolidatedList, err := ukCSLRecords(s.logger, initialDir)
-	if err != nil {
-		lastDataRefreshFailure.WithLabelValues("UKCSL").Set(float64(time.Now().Unix()))
-		stats.Errors = append(stats.Errors, fmt.Errorf("UKCSL: %v", err))
+	ukConsolidatedList := []*csl.UKCSLRecord{}
+	skipUKCSL, _ := strconv.ParseBool(os.Getenv("SKIP_UK_CSL"))
+	if !skipUKCSL {
+		ukConsolidatedList, err = ukCSLRecords(s.logger, initialDir)
+		if err != nil {
+			lastDataRefreshFailure.WithLabelValues("UKCSL").Set(float64(time.Now().Unix()))
+			stats.Errors = append(stats.Errors, fmt.Errorf("UKCSL: %v", err))
+		}
 	}
 
 	ukCSLs := precomputeCSLEntities[csl.UKCSLRecord](ukConsolidatedList, s.pipe)
@@ -314,15 +333,20 @@ func (s *searcher) refreshData(initialDir string) (*DownloadStats, error) {
 		lastDataRefreshCount.WithLabelValues("UKSL").Set(float64(len(ukSLs)))
 	}
 
-	// csl records from US downloaded here
-	consolidatedLists, err := cslRecords(s.logger, initialDir)
-	if err != nil {
-		lastDataRefreshFailure.WithLabelValues("CSL").Set(float64(time.Now().Unix()))
-		stats.Errors = append(stats.Errors, fmt.Errorf("CSL: %v", err))
+	consolidatedLists := &csl.CSL{}
+	skipUSCSL, _ := strconv.ParseBool(os.Getenv("SKIP_US_CSL"))
+	if !skipUSCSL {
+		// csl records from US downloaded here
+		consolidatedLists, err = cslRecords(s.logger, initialDir)
+		if err != nil {
+			lastDataRefreshFailure.WithLabelValues("CSL").Set(float64(time.Now().Unix()))
+			stats.Errors = append(stats.Errors, fmt.Errorf("CSL: %v", err))
+		}
+		if consolidatedLists == nil {
+			consolidatedLists = new(csl.CSL)
+		}
 	}
-	if consolidatedLists == nil {
-		consolidatedLists = new(csl.CSL)
-	}
+
 	els := precomputeCSLEntities[csl.EL](consolidatedLists.ELs, s.pipe)
 	meus := precomputeCSLEntities[csl.MEU](consolidatedLists.MEUs, s.pipe)
 	ssis := precomputeCSLEntities[csl.SSI](consolidatedLists.SSIs, s.pipe)

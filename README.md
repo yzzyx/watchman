@@ -225,6 +225,11 @@ PONG
 | `CSL_DOWNLOAD_TEMPLATE` | Same as `US_CSL_DOWNLOAD_URL` | |
 | `KEEP_STOPWORDS` | Boolean to keep stopwords in names. | `false` |
 | `DEBUG_NAME_PIPELINE` | Boolean to print debug messages for each name (SDN, SSI) processing step. | `false` |
+| `SKIP_OFAC` | Do not download OFAC files. | `false` |
+| `SKIP_DPL` | Do not download DPL. | `false` |
+| `SKIP_EU_CSL` | Do not download EU Consolidated Screening Lists. | `false` |
+| `SKIP_UK_CSL` | Do not download UK Consolidated Screening Lists. | `false` |
+| `SKIP_US_CSL` | Do not download US Consolidated Screening Lists. | `false` |
 
 ##### Downloads
 
